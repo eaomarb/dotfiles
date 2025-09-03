@@ -1,0 +1,9 @@
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = linux
+
+[Action]
+Description = Updating systemd-boot default to the latest normal kernel
+When = PostTransaction
+Exec = /usr/local/bin/update-systemdboot.sh
