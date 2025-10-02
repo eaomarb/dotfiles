@@ -73,3 +73,4 @@ fi
 rm -f "$TMP_PLAIN_JSON"
 MASTER_PASS=''
 BW_SESSION=''
+bw lock
