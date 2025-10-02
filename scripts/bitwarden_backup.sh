@@ -40,6 +40,9 @@ if [[ -z "$BW_SESSION" ]]; then
     exit 1
 fi
 
+# Sync with server to get latest changes
+bw sync --session "$BW_SESSION"
+
 # Export plain JSON for hashing (temporary)
 TMP_PLAIN_JSON="$(mktemp)"
 bw --session "$BW_SESSION" export --format json --output "$TMP_PLAIN_JSON"
