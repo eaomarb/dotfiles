@@ -1,6 +1,14 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
+cleanup() {
+    rm -f "${TMP_PLAIN_JSON:-}" 2>/dev/null || true
+    MASTER_PASS=''
+    BW_SESSION=''
+    bw lock 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 BACKUP_DIR="$HOME/bitwarden_backups"
 HASH_FILE="$BACKUP_DIR/.last_vault_hash"
 mkdir -p "$BACKUP_DIR"
@@ -21,11 +29,6 @@ MASTER_PASS=$(
         echo "GETPIN"
     } | pinentry-gnome3 2>/dev/null | awk '/^D / {print substr($0,3)}'
 ) || MASTER_PASS=""
-
-if [[ -z "$MASTER_PASS" ]]; then
-    log "ERROR: Master password not entered."
-    exit 1
-fi
 
 if [[ -z "$MASTER_PASS" ]]; then
     log "ERROR: Master password not entered."
