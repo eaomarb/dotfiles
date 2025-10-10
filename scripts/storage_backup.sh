@@ -44,7 +44,7 @@ prune_snapshots() {
 verify_export() {
     local export_dir="$1"
     log "Verifying export integrity: $export_dir"
-    if cat "$export_dir"/storage-backup-part-* | tar -tf - >/dev/null 2>&1; then
+    if cat "$export_dir"/storage-backup-part-*.tar.gpg | tar -tf - >/dev/null 2>&1; then
         log "Verification OK for $export_dir"
         return 0
     else
@@ -98,7 +98,7 @@ if [ "$CHANGED" -eq 1 ]; then
     mkdir -p "$EXPORT_DIR"
     log "Backing up vault to CMR: $EXPORT_DIR"
     ionice -c"$IONICE_CLASS" -n"$IONICE_NICE" tar -C "$(dirname "$SRC")" -cpf - "$(basename "$SRC")" \
-        | split -b "$SPLIT_SIZE" - "$EXPORT_DIR/storage-backup-part-"
+        | split -b "$SPLIT_SIZE" - "$EXPORT_DIR/storage-backup-part-" --additional-suffix=".tar.gpg"
     verify_export "$EXPORT_DIR"
 
     # Update latest-raw snapshot on SMR
@@ -131,7 +131,7 @@ if [[ "$DAY_OF_MONTH" == "01" ]]; then
         mkdir -p "$MONTHLY_DIR"
         log "Exporting SMR snapshot to CMR split parts: $MONTHLY_DIR"
         tar -C "$SNAPSHOT_SMR" -cf - "$(basename "$SNAPSHOT_DIR")" \
-            | split -b "$SPLIT_SIZE" - "$MONTHLY_DIR/storage-backup-part-"
+            | split -b "$SPLIT_SIZE" - "$MONTHLY_DIR/storage-backup-part-" --additional-suffix=".tar.gpg"
         verify_export "$MONTHLY_DIR"
 
         # Prune old snapshots

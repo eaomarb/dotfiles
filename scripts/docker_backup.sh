@@ -82,7 +82,7 @@ export_split_tar() {
     # Create encrypted tar and split
     tar -C "$(dirname "$SRC")" -cf - "$(basename "$SRC")" \
         | gpg --symmetric --cipher-algo AES256 --batch --yes --pinentry-mode loopback --passphrase-file "$RESTIC_PASSWORD_FILE" \
-        | split -b "$SPLIT_SIZE" - "$export_dir/docker-backup-part-"
+        | split -b "$SPLIT_SIZE" - "$export_dir/docker-backup-part-" --additional-suffix=".tar.gpg"
 
     log "Encrypted split tar export finished: $export_dir"
 }
