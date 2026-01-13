@@ -180,72 +180,52 @@ def get_cloud_files(session: requests.Session, validation_key: str, folder_id: i
     r.raise_for_status()
     return r.json().get("data", {}).get("media", [])
 
-def sync_local_folder(session: requests.Session, validation_key: str, parent_id: int, local_root: Path):
+def sync_local_folder(session: requests.Session, validation_key: str, parent_id: int, local_root: Path, manifest_file: Path):
     if not local_root.exists():
         log(f"{local_root} does not exist, skipping.")
         return
-
-    # Archivos locales
     local_files = {f.name: f for f in local_root.iterdir() if f.is_file()}
     if not local_files:
         log(f"No files in {local_root}, skipping.")
         return
 
-    # Traer carpetas de la nube
     cloud_folders = get_cloud_folders(session, validation_key, parent_id)
     if cloud_folders:
-        # Usar la carpeta más reciente
         cloud_folder = max(cloud_folders, key=lambda f: f.get("date", 0))
         cloud_folder_id = cloud_folder["id"]
         folder_name = cloud_folder["name"]
         log(f"Syncing '{local_root}' -> existing cloud folder '{folder_name}' (id={cloud_folder_id})")
     else:
-        # Si no hay carpeta, crear una
         last_file = max(local_files.values(), key=lambda f: f.stat().st_mtime)
         folder_name = datetime.fromtimestamp(last_file.stat().st_mtime).strftime("%Y%m%d_%H%M%S")
         cloud_folder_id = create_cloud_folder(session, validation_key, folder_name, parent_id)
         log(f"Created cloud folder '{folder_name}' id={cloud_folder_id}")
 
-    # Cargar manifest local
-    manifest = load_manifest(MANIFEST_FILE)
-
-    # Archivos existentes en la nube
+    manifest = load_manifest(manifest_file)
     cloud_files = get_cloud_files(session, validation_key, cloud_folder_id)
     cloud_files_map = {f["name"]: f for f in cloud_files}
 
-    # Subir solo los archivos que falten o cambien
     for name, f in sorted(local_files.items(), key=lambda x: x[1].stat().st_mtime):
         size = f.stat().st_size
         cloud_f = cloud_files_map.get(name)
-
         if cloud_f and manifest.get(name) == size and cloud_f["size"] == size:
             log(f"Skip {name} (already uploaded)")
             continue
-
         try:
             log(f"Uploading {name} ({size} bytes)")
             upload_file(session, validation_key, cloud_folder_id, f)
             manifest[name] = size
-            save_manifest(MANIFEST_FILE, manifest)
+            save_manifest(manifest_file, manifest)
             log(f"Uploaded {name}")
         except Exception as e:
             log(f"ERROR uploading {name}: {e}")
 
-    # Borrar archivos de la nube que ya no existen en local
     for name, cloud_f in cloud_files_map.items():
         if name not in local_files:
             try:
                 log(f"Deleting {name} from cloud (no longer in local)")
-                resp = session.post(
-                    f"{BASE}/sapi/media/file?action=delete&softdelete=true&validationkey={validation_key}",
-                    json={"data": {"files": [cloud_f["id"]]}}
-                )
-                log(f"DELETE RESPONSE for file_id {cloud_f['id']}: status={resp.status_code} body={resp.text[:500]}")
-                data = resp.json()
-                if "success" in data and "Files soft deleted successfully" in data["success"]:
-                    log(f"Deleted {name}")
-                else:
-                    log(f"Failed to delete {name}: {data}")
+                delete_cloud_file(session, validation_key, cloud_f["id"])
+                log(f"Deleted {name}")
             except Exception as e:
                 log(f"ERROR deleting {name}: {e}")
 
@@ -258,10 +238,10 @@ def main():
         log(f"Logged in, validationKey: {vk[:8]}...")
 
         # docker
-        sync_local_folder(session, vk, DOCKER_FOLDER_ID, LOCAL_DOCKER_ROOT)
+        sync_local_folder(session, vk, DOCKER_FOLDER_ID, LOCAL_DOCKER_ROOT, manifest_file=Path("/opt/backup-uploader/docker_manifest.json"))
 
         # gocryptfs
-        sync_local_folder(session, vk, STORAGE_FOLDER_ID, LOCAL_STORAGE_ROOT)
+        sync_local_folder(session, vk, STORAGE_FOLDER_ID, LOCAL_STORAGE_ROOT, manifest_file=Path("/opt/backup-uploader/gocryptfs_manifest.json"))
 
 if __name__ == "__main__":
     main()
