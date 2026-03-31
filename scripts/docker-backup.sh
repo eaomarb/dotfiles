@@ -11,14 +11,11 @@ CONTAINERS_TO_STOP=("telegraf" "prometheus" "qbittorrent")
 EXCLUDE_DIRS=("node_modules" "cache" ".cache" "tmp" "logs")
 MAX_BUNDLE_SIZE=3670016000  # 3.5 GB in bytes
 MIN_FREE_SPACE=$((20 * 1024 * 1024 * 1024))    # 20 GB
+MAX_BACKUP_SIZE=$((10 * 1024 * 1024 * 1024))   # 10 GB threshold
 LOG_FILE="$BACKUP_DIR/backup.log"
 
-# Ensure backup directory exists before logging
 mkdir -p "$BACKUP_DIR"
 
-# -----------------------------
-# FUNCTIONS
-# -----------------------------
 log() {
     echo "$(date +'%F %T') - $*" | tee -a "$LOG_FILE"
 }
@@ -30,6 +27,19 @@ check_disk_space() {
     if (( avail < MIN_FREE_SPACE )); then
         log "ERROR: Not enough free space. Required: $MIN_FREE_SPACE, Available: $avail"
         exit 1
+    fi
+}
+
+rotate_by_size() {
+    # Calculate total size of backup parts (if any)
+    local total_size
+    total_size=$(find "$BACKUP_DIR" -maxdepth 1 -name "docker_*.tar.gz.part.*" -type f -print0 2>/dev/null | xargs -0 stat -c %s 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+    if (( total_size >= MAX_BACKUP_SIZE )); then
+        log "Total backup size ($((total_size/1024/1024/1024)) GB) exceeds threshold ($((MAX_BACKUP_SIZE/1024/1024/1024)) GB). Cleaning up all backups to force a fresh full."
+        rm -f "$BACKUP_DIR"/docker_*.tar.gz.part.*
+        rm -f "$BACKUP_DIR"/backup.snar
+        rm -f "$BACKUP_DIR"/last_success
+        log "Backup directory cleaned."
     fi
 }
 
@@ -51,16 +61,9 @@ start_containers() {
     done
 }
 
-get_latest_snapshot() {
-    ls -1t "$BACKUP_DIR"/*.snar 2>/dev/null | head -1 || echo ""
-}
-
-calculate_backup_size() {
-    du -sb "$BACKUP_DIR" | awk '{print $1}'
-}
-
 perform_backup() {
     local date_stamp snapshot_file backup_type exclude_args
+    local success_flag="$BACKUP_DIR/last_success"
 
     date_stamp=$(date +'%Y-%m-%d_%H%M')
     snapshot_file="$BACKUP_DIR/backup.snar"
@@ -72,37 +75,31 @@ perform_backup() {
         exclude_args+=(--exclude="$d")
     done
 
-    # Decide full or incremental
-    if [[ ! -f "$snapshot_file" ]]; then
-        log "No snapshot found. Performing full backup."
+    # Decide full or incremental based on snapshot validity
+    if [[ -f "$snapshot_file" && -f "$success_flag" && "$success_flag" -nt "$snapshot_file" ]]; then
+        log "Using existing snapshot for incremental backup."
+    else
+        log "No valid snapshot found (or last backup failed). Performing full backup."
         backup_type="full"
         rm -f "$snapshot_file"
     fi
 
-    log "Starting $backup_type backup of $DOCKER_DIR (metadata only, streaming)"
+    log "Starting $backup_type backup of $DOCKER_DIR"
 
-# Streaming backup: tar -> gzip -> gpg -> split
+    # Streaming backup: tar -> gzip -> gpg -> split
     tar --listed-incremental="$snapshot_file" \
-       --create \
-       --gzip \
-       --atime-preserve=system \
-       --ignore-failed-read \
-       "${exclude_args[@]}" \
-       -C "$DOCKER_DIR" . \
+        --create \
+        --gzip \
+        --atime-preserve=system \
+        "${exclude_args[@]}" \
+        -C "$DOCKER_DIR" . \
     | gpg --batch --yes --passphrase-file "$PASSFILE" -c \
     | split -b "$MAX_BUNDLE_SIZE" - "$BACKUP_DIR/docker_$date_stamp.tar.gz.part."
 
+    # If we reach here, all commands succeeded
+    touch "$success_flag"
 
     log "$backup_type backup completed: $BACKUP_DIR/docker_$date_stamp.tar.gz.part.*"
-}
-
-rotate_full_if_needed() {
-    local total_size
-    total_size=$(calculate_backup_size)
-    if (( total_size > MAX_BUNDLE_SIZE * 5 )); then
-        log "Total backup size $total_size exceeds threshold, rotating full backup"
-        rm -rf "$BACKUP_DIR"/*
-    fi
 }
 
 # -----------------------------
@@ -110,8 +107,8 @@ rotate_full_if_needed() {
 # -----------------------------
 log "=================== Backup started ==================="
 check_disk_space
+rotate_by_size          # <-- Clean up if total backup size > 10GB
 stop_containers
 perform_backup
 start_containers
-rotate_full_if_needed
 log "=================== Backup finished ==================="
