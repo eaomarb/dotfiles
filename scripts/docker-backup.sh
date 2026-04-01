@@ -9,9 +9,9 @@ BACKUP_DIR="/backups/docker"
 PASSFILE="/root/.docker_pass"
 CONTAINERS_TO_STOP=("telegraf" "prometheus" "qbittorrent")
 EXCLUDE_DIRS=("node_modules" "cache" ".cache" "tmp" "logs")
-MAX_BUNDLE_SIZE=3670016000  # 3.5 GB in bytes
-MIN_FREE_SPACE=$((20 * 1024 * 1024 * 1024))    # 20 GB
-MAX_BACKUP_SIZE=$((10 * 1024 * 1024 * 1024))   # 10 GB threshold
+MAX_BUNDLE_SIZE=3670016000        # 3.5 GB in bytes
+MIN_FREE_SPACE=$((20 * 1024 * 1024 * 1024))   # 20 GB
+MAX_BACKUP_SIZE=$((10 * 1024 * 1024 * 1024))  # 10 GB threshold
 LOG_FILE="$BACKUP_DIR/backup.log"
 
 mkdir -p "$BACKUP_DIR"
@@ -31,11 +31,12 @@ check_disk_space() {
 }
 
 rotate_by_size() {
-    # Calculate total size of backup parts (if any)
+    # Sum sizes of all backup parts using find's -printf (avoids xargs pitfalls)
     local total_size
-    total_size=$(find "$BACKUP_DIR" -maxdepth 1 -name "docker_*.tar.gz.part.*" -type f -print0 2>/dev/null | xargs -0 stat -c %s 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+    total_size=$(find "$BACKUP_DIR" -maxdepth 1 -name "docker_*.tar.gz.part.*" -type f -printf '%s\n' 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+
     if (( total_size >= MAX_BACKUP_SIZE )); then
-        log "Total backup size ($((total_size/1024/1024/1024)) GB) exceeds threshold ($((MAX_BACKUP_SIZE/1024/1024/1024)) GB). Cleaning up all backups to force a fresh full."
+        log "Total backup size ($((total_size/1024/1024/1024)) GB) exceeds threshold ($((MAX_BACKUP_SIZE/1024/1024/1024)) GB). Cleaning up to force a fresh full."
         rm -f "$BACKUP_DIR"/docker_*.tar.gz.part.*
         rm -f "$BACKUP_DIR"/backup.snar
         rm -f "$BACKUP_DIR"/last_success
@@ -107,7 +108,7 @@ perform_backup() {
 # -----------------------------
 log "=================== Backup started ==================="
 check_disk_space
-rotate_by_size          # <-- Clean up if total backup size > 10GB
+rotate_by_size
 stop_containers
 perform_backup
 start_containers
