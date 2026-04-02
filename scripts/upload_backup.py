@@ -183,13 +183,24 @@ def cleanup_old_folders(session: requests.Session, validation_key: str, parent_i
     cutoff = datetime.now() - timedelta(days=retention_days)
     folders = get_cloud_folders(session, validation_key, parent_id)
     for folder in folders:
-        # The folder's date is a Unix timestamp (seconds) from the API
         created_ts = folder.get("date")
         if not created_ts:
             continue
-        created_dt = datetime.fromtimestamp(created_ts)
+
+        # Safely convert timestamp, skip if invalid (out of range, negative, etc.)
+        try:
+            created_dt = datetime.fromtimestamp(created_ts)
+        except (ValueError, OverflowError, OSError) as e:
+            log(f"WARNING: Invalid timestamp {created_ts} for folder '{folder.get('name')}' (id={folder.get('id')}): {e}. Skipping deletion.")
+            continue
+
+        # Optional: additional sanity check (year > 2100 is very likely wrong)
+        if created_dt.year > 2100:
+            log(f"WARNING: Folder '{folder.get('name')}' has year {created_dt.year} which is far in the future (timestamp {created_ts}). Skipping deletion.")
+            continue
+
         if created_dt < cutoff:
-            log(f"Deleting old folder {folder['name']} (id={folder['id']}) created on {created_dt}")
+            log(f"Deleting old folder '{folder['name']}' (id={folder['id']}) created on {created_dt}")
             delete_cloud_folder(session, validation_key, folder["id"])
 
 # -------------------------
@@ -277,13 +288,19 @@ def main():
         vk = login(session)
         log(f"Logged in, validationKey: {vk[:8]}...")
 
-        # Process Docker backups
-        sync_local_backups(session, vk, DOCKER_FOLDER_ID, LOCAL_DOCKER_ROOT,
-                           backup_type="docker", retention_days=RETENTION_DAYS)
+        # Process Docker backups - catch errors so storage backup still runs
+        try:
+            sync_local_backups(session, vk, DOCKER_FOLDER_ID, LOCAL_DOCKER_ROOT,
+                               backup_type="docker", retention_days=RETENTION_DAYS)
+        except Exception as e:
+            log(f"ERROR while syncing Docker backups: {e}. Continuing with storage backups.")
 
         # Process DAR (gocryptfs) backups
-        sync_local_backups(session, vk, STORAGE_FOLDER_ID, LOCAL_STORAGE_ROOT,
-                           backup_type="dar", retention_days=RETENTION_DAYS)
+        try:
+            sync_local_backups(session, vk, STORAGE_FOLDER_ID, LOCAL_STORAGE_ROOT,
+                               backup_type="dar", retention_days=RETENTION_DAYS)
+        except Exception as e:
+            log(f"ERROR while syncing storage backups: {e}.")
 
 if __name__ == "__main__":
     main()
