@@ -1,67 +1,45 @@
 #!/usr/bin/env python3
 """
-Requirements:
-  pip install requests python-dotenv requests-toolbelt
+O2 Cloud Backup Sync
+- Sequentially and reliably processes queues of multiple local backups.
+- Accurate Full/Incremental detection by reading the content of the local 'last_full' marker.
+- Weekly checksum verification using 'rclone check --one-way' filtered by exact timestamp.
+- Authentication retries (401) separated from network retries, restarting the Docker gateway.
+- Early abort in main() if the Docker sync fails critically, protecting the Gocryptfs sync.
 """
-from __future__ import annotations
 
+from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import quote
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
-import requests
 from dotenv import load_dotenv
-from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-# -------------------------
-# config
-# -------------------------
 load_dotenv()
 
-CLOUD_EMAIL = os.getenv("CLOUD_EMAIL", "").strip()
-CLOUD_PASSWORD = os.getenv("CLOUD_PASSWORD", "").strip()
-if not CLOUD_EMAIL or not CLOUD_PASSWORD:
-    raise SystemExit("CLOUD_EMAIL and CLOUD_PASSWORD must be set")
+RCLONE_REMOTE = os.getenv("RCLONE_REMOTE", "o2cloud")
+RCLONE_CONFIG = os.getenv("RCLONE_CONFIG", "/home/omar/.config/rclone/rclone.conf")
 
-# cloud folder IDs
-DOCKER_FOLDER_ID = 17922957
-STORAGE_FOLDER_ID = 17922958
-
-# local backup roots
+DOCKER_ROOT_PATH = "Backups/Server/Docker"
+STORAGE_ROOT_PATH = "Backups/Server/Gocryptfs"
 LOCAL_DOCKER_ROOT = Path("/backups/docker")
 LOCAL_STORAGE_ROOT = Path("/backups/gocryptfs")
 
-# logging
 LOG_FILE = "/opt/backup-uploader/cloud_backup_sync.log"
+MAX_RETRIES = 3
+MAX_AUTH_RETRIES = 10
+RETRY_DELAY = 10
+MOVE_DELAY = 5
+VERIFY_ATTEMPTS = 4
+VERIFY_WAIT = 30
 
-# retention in days for cloud folders (set to 0 to disable deletion)
-RETENTION_DAYS = 30
+TRANSFERS = 1
 
-# endpoints
-BASE = "https://cloud.o2online.es"
-UPLOAD_BASE = "https://upload.cloud.o2online.es/sapi/upload?action=save&acceptasynchronous=true"
-LOGIN_URL = f"{BASE}/sapi/login?action=login"
-CREATE_FOLDER_URL = f"{BASE}/sapi/media/folder?action=save"
-LIST_FOLDER_URL = f"{BASE}/sapi/media/folder?action=list"
-
-REQUEST_TIMEOUT = (10, 600)
-MAX_UPLOAD_RETRIES = 3
-RETRY_DELAY = 5
-
-COMMON_HEADERS = {
-    "Origin": BASE,
-    "Referer": BASE + "/",
-    "User-Agent": "backup-sync-script/2.0",
-}
-
-# -------------------------
-# helpers
-# -------------------------
 def log(msg: str):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{now}] {msg}"
@@ -69,238 +47,396 @@ def log(msg: str):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
-def generate_device_id() -> str:
-    import random
-    return "web-" + "".join(random.choices("0123456789abcdef", k=32))
+# -------------------------
+# RCLONE OPERATIONS
+# -------------------------
+def rclone_mkdir(remote_path: str):
+    cmd = ['rclone', 'mkdir', '--config', RCLONE_CONFIG,
+           f"{RCLONE_REMOTE}:{remote_path.strip('/')}"]
+    subprocess.run(cmd, capture_output=True, text=True, check=False)
+    log(f"Created folder: {remote_path}")
 
-def login(session: requests.Session) -> str:
-    r = session.get(BASE + "/", timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    payload = f"login={quote(CLOUD_EMAIL)}&password={quote(CLOUD_PASSWORD)}&rememberme=true"
-    headers = {**COMMON_HEADERS, "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "Accept": "*/*", "X-deviceid": generate_device_id()}
-    r = session.post(LOGIN_URL, data=payload, headers=headers, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    key = r.json().get("data", {}).get("validationkey")
-    if not key:
-        raise RuntimeError(f"Login failed: {r.json()}")
-    return key
+def rclone_move(src: str, dst: str):
+    cmd = ['rclone', 'move', '--config', RCLONE_CONFIG,
+           f"{RCLONE_REMOTE}:{src.strip('/')}",
+           f"{RCLONE_REMOTE}:{dst.strip('/')}",
+           '--retries', '3', '--low-level-retries', '10',
+           '--timeout', '600s', '--contimeout', '120s',
+           '--transfers', str(TRANSFERS), '-q']
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+    if res.returncode == 0:
+        log(f"Moved: {src} -> {dst}")
+    else:
+        raise RuntimeError(f"rclone move failed: {res.stderr[:200]}")
 
-def create_cloud_folder(session: requests.Session, validation_key: str, folder_name: str, parent_id: int) -> int:
-    url = f"{CREATE_FOLDER_URL}&validationkey={validation_key}"
-    payload = {"data": {"magic": False, "offline": False, "name": folder_name, "parentid": parent_id}}
-    r = session.post(url, json=payload, headers={**COMMON_HEADERS, "Content-Type": "application/json"}, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    folder_id = r.json().get("data", {}).get("folder", {}).get("id") or r.json().get("id")
-    if not folder_id:
-        raise RuntimeError(f"Failed to create folder: {r.json()}")
-    return int(folder_id)
+def rclone_delete(remote_path: str):
+    cmd = ['rclone', 'deletefile', '--config', RCLONE_CONFIG,
+           f"{RCLONE_REMOTE}:{remote_path.strip('/')}"]
+    subprocess.run(cmd, capture_output=True, text=True)
+    log(f"Deleted: {remote_path}")
 
-def get_cloud_folders(session: requests.Session, validation_key: str, parent_id: int) -> List[dict]:
-    """List all subfolders under a parent folder."""
-    url = f"{LIST_FOLDER_URL}&parentid={parent_id}&limit=200&validationkey={validation_key}"
-    r = session.get(url, headers=COMMON_HEADERS, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    return r.json().get("data", {}).get("folders", [])
-
-def get_cloud_folder_by_name(session: requests.Session, validation_key: str, parent_id: int, name: str) -> Optional[int]:
-    folders = get_cloud_folders(session, validation_key, parent_id)
-    for f in folders:
-        if f.get("name") == name:
-            return f["id"]
-    return None
-
-def get_cloud_files(session: requests.Session, validation_key: str, folder_id: int) -> List[dict]:
-    """List all files in a cloud folder."""
-    url = f"{BASE}/sapi/media?action=get&folderid={folder_id}&limit=200&validationkey={validation_key}"
-    payload = {"data": {"fields": ["name", "modificationdate", "size", "etag"]}}
-    r = session.post(url, json=payload, headers={**COMMON_HEADERS, "Content-Type": "application/json"}, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    return r.json().get("data", {}).get("media", [])
-
-def copy_cookies_to_upload_domain(session: requests.Session) -> None:
-    cookies = session.cookies.get_dict(domain="cloud.o2online.es")
-    for name, value in cookies.items():
-        session.cookies.set(name, value, domain="upload.cloud.o2online.es")
-
-def upload_file(session: requests.Session, validation_key: str, folder_id: int, file_path: Path) -> dict:
-    url = f"{UPLOAD_BASE}&validationkey={validation_key}"
-    stats = file_path.stat()
-    data_part = {
-        "data": {
-            "name": file_path.name,
-            "size": stats.st_size,
-            "modificationdate": datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
-            "contenttype": "application/octet-stream",
-            "folderid": folder_id,
-        }
-    }
-    copy_cookies_to_upload_domain(session)
-
-    last_exc = None
-    for attempt in range(1, MAX_UPLOAD_RETRIES + 1):
-        fh = None
-        try:
-            fh = open(file_path, "rb")
-            m = MultipartEncoder(fields={"data": json.dumps(data_part), "file": (file_path.name, fh, "application/octet-stream")})
-            headers = {"Content-Type": m.content_type, "X-deviceid": generate_device_id(), **COMMON_HEADERS, "Accept": "*/*"}
-            r = session.post(url, data=m, headers=headers, timeout=REQUEST_TIMEOUT)
-            r.raise_for_status()
-            return r.json()
-        except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-            last_exc = exc
-            log(f"Upload attempt {attempt} failed for {file_path.name}: {exc}. Retrying in {RETRY_DELAY}s")
+def rclone_upload(local_file: Path, remote_folder: str):
+    remote_dest = f"{RCLONE_REMOTE}:{remote_folder.strip('/')}/"
+    network_attempts = 0
+    auth_attempts = 0
+    
+    while network_attempts < MAX_RETRIES:
+        log(f"Uploading: {local_file.name} ({local_file.stat().st_size} bytes)")
+        cmd = ['rclone', 'copy', '--config', RCLONE_CONFIG,
+               str(local_file), remote_dest,
+               '--retries', '3', '--low-level-retries', '10',
+               '--timeout', '3600s', '--contimeout', '300s',
+               '--no-check-dest',
+               '--buffer-size', '256M',
+               '--transfers', str(TRANSFERS),
+               '-v'] 
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
+        if res.returncode == 0:
+            log(f"✅ Uploaded to {remote_folder}: {local_file.name}")
+            return
+            
+        err_str = res.stderr.lower()
+        # If the error is authentication-related, restart the gateway and retry without consuming network attempts
+        if "401" in err_str or "unauthorized" in err_str or "session" in err_str:
+            if auth_attempts < MAX_AUTH_RETRIES:
+                log("⚠️ Authentication error detected. Restarting gateway...")
+                subprocess.run(['docker', 'restart', 'o2-webdav'], capture_output=True, timeout=60)
+                time.sleep(20)
+                log("Gateway restarted. Retrying upload...")
+                auth_attempts += 1
+                continue
+        
+        # Network error or max auth retries reached
+        network_attempts += 1
+        log(f"❌ Failed (attempt {network_attempts}/{MAX_RETRIES}): {res.stderr[:200]}")
+        if network_attempts < MAX_RETRIES:
             time.sleep(RETRY_DELAY)
-        finally:
-            if fh:
-                fh.close()
-    raise RuntimeError(f"Failed uploading {file_path} after {MAX_UPLOAD_RETRIES} attempts: last error: {last_exc}")
+            
+    raise RuntimeError(f"Failed to upload {local_file.name}")
 
-def delete_cloud_folder(session: requests.Session, validation_key: str, folder_id: int):
-    """Delete a folder (and all its contents) from the cloud."""
-    # First, list and delete all files inside the folder (required by the API)
-    files = get_cloud_files(session, validation_key, folder_id)
-    if files:
-        delete_file_url = f"{BASE}/sapi/media/file?action=delete&softdelete=true&validationkey={validation_key}"
-        file_ids = [f["id"] for f in files]
-        payload = {"data": {"files": file_ids}}
-        headers = {"Content-Type": "application/json", **COMMON_HEADERS, "Accept": "application/json"}
-        r = session.post(delete_file_url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT)
-        r.raise_for_status()
-        log(f"Deleted {len(file_ids)} files from folder {folder_id}")
+def rclone_list(remote_path: str) -> List[str]:
+    cmd = ['rclone', 'lsjson', '--config', RCLONE_CONFIG,
+           f"{RCLONE_REMOTE}:{remote_path.strip('/')}", '--max-depth', '1', '--no-modtime']
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        return []
+    try:
+        items = json.loads(res.stdout)
+        return [item['Name'] for item in items if 'Name' in item and item.get('IsDir', False)]
+    except Exception:
+        return []
 
-    # Then delete the folder itself
-    delete_folder_url = f"{BASE}/sapi/media/folder?action=delete&softdelete=true&validationkey={validation_key}"
-    payload = {"data": {"folders": [folder_id]}}
-    headers = {"Content-Type": "application/json", **COMMON_HEADERS, "Accept": "application/json"}
-    r = session.post(delete_folder_url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT)
-    r.raise_for_status()
-    log(f"Deleted folder {folder_id}")
+def rclone_list_files(remote_path: str) -> Dict[str, int]:
+    cmd = ['rclone', 'lsjson', '--config', RCLONE_CONFIG,
+           f"{RCLONE_REMOTE}:{remote_path.strip('/')}", '--no-modtime']
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        return {}
+    try:
+        items = json.loads(res.stdout)
+        return {item['Name']: item.get('Size', 0)
+                for item in items
+                if 'Name' in item and not item.get('IsDir', False)}
+    except Exception:
+        return {}
 
-def cleanup_old_folders(session: requests.Session, validation_key: str, parent_id: int, retention_days: int):
-    """Delete folders older than retention_days (based on their creation date)."""
-    if retention_days <= 0:
-        return
-    cutoff = datetime.now() - timedelta(days=retention_days)
-    folders = get_cloud_folders(session, validation_key, parent_id)
-    for folder in folders:
-        created_ts = folder.get("date")
-        if not created_ts:
-            continue
-
-        # Safely convert timestamp, skip if invalid (out of range, negative, etc.)
-        try:
-            created_dt = datetime.fromtimestamp(created_ts)
-        except (ValueError, OverflowError, OSError) as e:
-            log(f"WARNING: Invalid timestamp {created_ts} for folder '{folder.get('name')}' (id={folder.get('id')}): {e}. Skipping deletion.")
-            continue
-
-        # Optional: additional sanity check (year > 2100 is very likely wrong)
-        if created_dt.year > 2100:
-            log(f"WARNING: Folder '{folder.get('name')}' has year {created_dt.year} which is far in the future (timestamp {created_ts}). Skipping deletion.")
-            continue
-
-        if created_dt < cutoff:
-            log(f"Deleting old folder '{folder['name']}' (id={folder['id']}) created on {created_dt}")
-            delete_cloud_folder(session, validation_key, folder["id"])
+def verify_files(remote_folder: str, expected_files: Dict[str, int]) -> bool:
+    remote_files = rclone_list_files(remote_folder)
+    if not remote_files:
+        log(f"⚠️ No files found in {remote_folder}")
+        return False
+    for name, size in expected_files.items():
+        remote_size = remote_files.get(name)
+        if remote_size != size:
+            log(f"⚠️ {name}: expected {size}, got {remote_size}")
+            return False
+    log(f"✅ Verified {len(expected_files)} files in {remote_folder}")
+    return True
 
 # -------------------------
-# Backup grouping logic
+# FORCE DIRECTORY CREATION
 # -------------------------
-def group_files_by_backup(local_root: Path, backup_type: str) -> Dict[str, List[Path]]:
-    """
-    Group files in local_root by the backup timestamp found in their names.
-    Returns a dict {timestamp: list_of_paths}.
-    """
+def ensure_remote_directory(remote_path: str) -> bool:
+    rclone_mkdir(remote_path)
+    time.sleep(2)
+    parent = "/".join(remote_path.split("/")[:-1])
+    name = remote_path.split("/")[-1]
+    items = rclone_list(parent) if parent else rclone_list("")
+    if name in items:
+        log(f"Directory {remote_path} confirmed.")
+        return True
+    log(f"Directory {remote_path} not visible, forcing with .keep")
+    try:
+        temp_file = "/tmp/rclone_keep_temp"
+        with open(temp_file, "w") as f:
+            f.write("keep")
+        rclone_upload(Path(temp_file), remote_path)
+        os.remove(temp_file)
+        time.sleep(2)
+        items = rclone_list(parent) if parent else rclone_list("")
+        if name in items:
+            log(f"Directory {remote_path} forced successfully.")
+            rclone_delete(f"{remote_path}/rclone_keep_temp")
+            time.sleep(1)
+            return True
+        else:
+            log(f"⚠️ Directory {remote_path} still not visible after forcing.")
+            return False
+    except Exception as e:
+        log(f"⚠️ Failed to force directory {remote_path}: {e}")
+        return False
+
+# -------------------------
+# LOCAL BACKUP GROUPING
+# -------------------------
+def group_files(local_root: Path, backup_type: str) -> Dict[str, List[Path]]:
     groups = {}
     if backup_type == "docker":
-        # Pattern: docker_YYYY-MM-DD_HHMM.tar.gz.part.*
-        pattern = re.compile(r"docker_(\d{4}-\d{2}-\d{2}_\d{4})\.tar\.gz\.part\..+")
-    elif backup_type == "dar":
-        # Pattern: backup_data_YYYYMMDD_HHMMSS.dar or backup_data_YYYYMMDD_HHMMSS.1.dar, etc.
-        pattern = re.compile(r"backup_data_(\d{8}_\d{6})(?:\.\d+)?\.dar")
+        pattern = re.compile(r"docker_(\d{4}-\d{2}-\d{2}_\d{6})\.tar\.gz\.part\..+")
     else:
-        raise ValueError("backup_type must be 'docker' or 'dar'")
-
-    for file_path in local_root.iterdir():
-        if not file_path.is_file():
-            continue
-        match = pattern.match(file_path.name)
-        if match:
-            ts = match.group(1)
-            groups.setdefault(ts, []).append(file_path)
+        pattern = re.compile(r"backup_data_(\d{8}_\d{6})(?:_catalog)?(?:\.\d+)?\.dar")
+    for f in local_root.iterdir():
+        if f.is_file() and (m := pattern.match(f.name)):
+            groups.setdefault(m.group(1), []).append(f)
     return groups
 
-def upload_backup_set(session: requests.Session, validation_key: str, parent_id: int,
-                      folder_name: str, local_files: List[Path]) -> None:
-    """
-    Upload a set of files (one backup execution) to a cloud folder.
-    If the folder does not exist, it is created. Only missing files are uploaded.
-    """
-    # Find or create the folder
-    folder_id = get_cloud_folder_by_name(session, validation_key, parent_id, folder_name)
-    if folder_id is None:
-        folder_id = create_cloud_folder(session, validation_key, folder_name, parent_id)
-        log(f"Created cloud folder '{folder_name}' (id={folder_id})")
+# -------------------------
+# WEEKLY CHECKSUM VERIFICATION
+# -------------------------
+def full_checksum_verification(local_root: Path, remote_root: str, backup_type: str, current_ts: str) -> bool:
+    remote_path = f"{remote_root}/current/{current_ts}"
+    log(f"=== Starting full checksum verification for {backup_type} (timestamp: {current_ts}) ===")
+    
+    # Filter strictly by the specific timestamp to avoid comparing unrelated local files
+    if backup_type == "docker":
+        include = f"docker_{current_ts}.tar.gz.part.*"
     else:
-        log(f"Using existing cloud folder '{folder_name}' (id={folder_id})")
+        include = f"backup_data_{current_ts}*.dar"
 
-    # List existing files in that folder
-    existing_files = {f["name"]: f["size"] for f in get_cloud_files(session, validation_key, folder_id)}
+    cmd = [
+        "rclone", "check", "--config", RCLONE_CONFIG,
+        str(local_root), f"{RCLONE_REMOTE}:{remote_path}",
+        "--checksum", "--download",
+        "--include", include,
+        "--one-way",  # Only check if local files exist in remote, ignore extra remote files
+        "--exclude", "backup.log",
+        "--exclude", "backup.snar",
+        "--exclude", "last_full",
+        "--exclude", "last_success",
+        "--retries", "3",
+        "-P"
+    ]
+    log(f"Running full checksum: {' '.join(cmd)}")
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=14400)
+    if res.returncode == 0:
+        log(f"✅ Full checksum verification PASSED for {backup_type}")
+        return True
+    else:
+        log(f"❌ Full checksum verification FAILED for {backup_type} (exit {res.returncode})")
+        log(f"Output: {res.stdout}\nError: {res.stderr}")
+        return False
 
-    for local_file in sorted(local_files, key=lambda p: p.name):
-        if local_file.name in existing_files and existing_files[local_file.name] == local_file.stat().st_size:
-            log(f"Skipping {local_file.name} (already uploaded)")
-            continue
-        log(f"Uploading {local_file.name} ({local_file.stat().st_size} bytes)")
-        upload_file(session, validation_key, folder_id, local_file)
-        log(f"Uploaded {local_file.name}")
+def run_weekly_checksum_if_needed():
+    marker_file = Path("/opt/backup-uploader/last_full_check.txt")
+    now = datetime.now()
 
-def sync_local_backups(session: requests.Session, validation_key: str, parent_id: int,
-                       local_root: Path, backup_type: str, retention_days: int) -> None:
-    """Main sync function: group local backups, upload each set, and clean up old folders."""
+    if not marker_file.exists():
+        marker_file.touch()
+        log("First run: weekly full checksum verification will start next week.")
+        return
+
+    last_run = datetime.fromtimestamp(marker_file.stat().st_mtime)
+    if (now - last_run) < timedelta(days=7):
+        log("Weekly full checksum verification not due yet.")
+        return
+
+    log("Weekly full checksum verification is due. Running...")
+
+    docker_ts = None
+    docker_subs = rclone_list(f"{DOCKER_ROOT_PATH}/current")
+    if docker_subs:
+        docker_ts = sorted(docker_subs)[-1]
+        log(f"Docker current timestamp: {docker_ts}")
+
+    crypt_ts = None
+    crypt_subs = rclone_list(f"{STORAGE_ROOT_PATH}/current")
+    if crypt_subs:
+        crypt_ts = sorted(crypt_subs)[-1]
+        log(f"Gocryptfs current timestamp: {crypt_ts}")
+
+    docker_ok = True
+    crypt_ok = True
+    if docker_ts:
+        docker_ok = full_checksum_verification(LOCAL_DOCKER_ROOT, DOCKER_ROOT_PATH, "docker", docker_ts)
+    if crypt_ts:
+        crypt_ok = full_checksum_verification(LOCAL_STORAGE_ROOT, STORAGE_ROOT_PATH, "gocryptfs", crypt_ts)
+
+    if docker_ok and crypt_ok:
+        marker_file.touch()
+        log("Weekly full checksum verification completed successfully.")
+    else:
+        log("⚠️ Weekly full checksum verification failed. Will retry next week.")
+
+# -------------------------
+# MAIN SYNC LOGIC
+# -------------------------
+def sync_backups(root_path: str, local_root: Path, backup_type: str) -> bool:
     if not local_root.exists():
-        log(f"{local_root} does not exist, skipping.")
-        return
+        log(f"Local path {local_root} not found, skipping.")
+        return True
+        
+    # ---- Restart gateway to ensure fresh session ----
+    log("Restarting gateway to ensure fresh session...")
+    subprocess.run(['docker', 'restart', 'o2-webdav'], capture_output=True, timeout=60)
+    time.sleep(20)
+    log("Gateway restarted.")        
 
-    # Group files by their backup timestamp
-    groups = group_files_by_backup(local_root, backup_type)
+    if not ensure_remote_directory(root_path):
+        log(f"ERROR: Could not create/verify root directory {root_path}. Aborting.")
+        return False
+
+    current_path = f"{root_path}/current"
+    old_path = f"{root_path}/old"
+
+    rclone_mkdir(current_path)
+    time.sleep(2)
+    rclone_mkdir(old_path)
+    time.sleep(2)
+
+    groups = group_files(local_root, backup_type)
     if not groups:
-        log(f"No valid backup files found in {local_root}")
+        log(f"No backups found in {local_root}")
+        return True
+
+    time.sleep(2)
+    current_subs = rclone_list(current_path)
+    current_base = sorted(current_subs)[-1] if current_subs else None
+
+    to_process = {ts: files for ts, files in groups.items()
+                  if not current_base or ts > current_base}
+
+    if not to_process:
+        log("All backups are already synced.")
+        return True
+
+    sorted_ts = sorted(to_process.keys())
+    log(f"Processing new backups: {', '.join(sorted_ts)}")
+
+    # ---- Determine the exact full backup timestamp from local marker ----
+    last_full_file = local_root / "last_full"
+    full_ts = None
+    if last_full_file.exists():
+        full_ts = last_full_file.read_text().strip()
+        
+    if not full_ts:
+        # Fallback: if marker is missing, assume the oldest in queue is full
+        full_ts = sorted_ts[0]
+        log(f"Warning: last_full marker empty/missing. Assuming oldest is full: {full_ts}")
+
+    for ts in sorted_ts:
+        local_files = to_process[ts]
+        expected = {f.name: f.stat().st_size for f in local_files}
+
+        is_full_backup = (ts == full_ts)
+
+        if is_full_backup:
+            dest_folder = f"{current_path}/{ts}"
+            if current_base is not None and current_base != ts:
+                try:
+                    dt = datetime.strptime(current_base.split("_")[0],
+                                          "%Y-%m-%d" if "-" in current_base else "%Y%m%d")
+                    month_year = dt.strftime("%m-%Y")
+                except Exception:
+                    month_year = datetime.now().strftime("%m-%Y")
+                archive_dest = f"{old_path}/{month_year}"
+                rclone_mkdir(archive_dest)
+                time.sleep(MOVE_DELAY)
+                rclone_move(f"{current_path}/{current_base}", f"{archive_dest}/{current_base}")
+                time.sleep(MOVE_DELAY)
+            
+            current_base = ts
+        else:
+            # Incremental backup: goes into the folder of the latest full
+            if current_base is None:
+                # This shouldn't happen if we have a full_ts, but fallback to its own folder just in case
+                log(f"Warning: Incremental {ts} detected but no current_base. Uploading to its own folder.")
+                dest_folder = f"{current_path}/{ts}"
+            else:
+                dest_folder = f"{current_path}/{full_ts}"
+                log(f"Incremental {ts} → merging into {dest_folder}")
+
+        rclone_mkdir(dest_folder)
+        time.sleep(2)
+        uploaded_count = 0
+        for lf in sorted(local_files, key=lambda p: p.name):
+            rclone_upload(lf, dest_folder)
+            uploaded_count += 1
+        log(f"Uploaded {uploaded_count} files to {dest_folder}")
+
+        # ---- VERIFICATION AFTER EACH TIMESTAMP ----
+        for attempt in range(1, VERIFY_ATTEMPTS + 1):
+            if verify_files(dest_folder, expected):
+                break
+            if attempt < VERIFY_ATTEMPTS:
+                log(f"⏳ Verification attempt {attempt}/{VERIFY_ATTEMPTS}, waiting {VERIFY_WAIT}s")
+                time.sleep(VERIFY_WAIT)
+        else:
+            raise RuntimeError(f"Verification failed for {dest_folder} after {VERIFY_ATTEMPTS} attempts")
+
+    # ---- ORPHAN CLEANUP ----
+    log("Checking for orphan folders...")
+    all_items = rclone_list(root_path)
+    processed_ts = set(to_process.keys())
+    for item in all_items:
+        if item in ('current', 'old'):
+            continue
+        if item in processed_ts:
+            continue
+        log(f"Orphan folder found: {item}")
+        try:
+            dt = datetime.strptime(item.split("_")[0],
+                                  "%Y-%m-%d" if "-" in item else "%Y%m%d")
+            month_year = dt.strftime("%m-%Y")
+        except Exception:
+            month_year = datetime.now().strftime("%m-%Y")
+        archive_dest = f"{old_path}/{month_year}"
+        rclone_mkdir(archive_dest)
+        time.sleep(MOVE_DELAY)
+        existing = rclone_list(archive_dest)
+        dest_name = item
+        if dest_name in existing:
+            suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest_name = f"{item}_orphan_{suffix}"
+            log(f"Destination exists, renaming to {dest_name}")
+        rclone_move(f"{root_path}/{item}", f"{archive_dest}/{dest_name}")
+        time.sleep(MOVE_DELAY)
+
+    # ---- FINAL SIZE VERIFICATION (end of sync, 30s wait) ----
+    if current_base:
+        log("Waiting 30 seconds for gateway to index files...")
+        time.sleep(30)
+        log("Performing final size verification of current/ folder...")
+        remote_files = rclone_list_files(f"{current_path}/{current_base}")
+        if remote_files:
+            log(f"✅ Final size verification passed: {len(remote_files)} files in {current_path}/{current_base}")
+        else:
+            log(f"⚠️ WARNING: No files found in {current_path}/{current_base}. Check manually.")
+
+    log("Sync completed successfully.")
+    return True
+
+def main():
+    # Early abort: if Docker fails critically, do not attempt Gocryptfs
+    if not sync_backups(DOCKER_ROOT_PATH, LOCAL_DOCKER_ROOT, "docker"):
+        log("Aborting subsequent syncs due to critical failure in Docker.")
+        return
+        
+    if not sync_backups(STORAGE_ROOT_PATH, LOCAL_STORAGE_ROOT, "dar"):
+        log("Aborting subsequent syncs due to critical failure in Storage.")
         return
 
-    log(f"Found {len(groups)} backup sets in {local_root}")
-
-    # Process each backup set (newest first? doesn't matter)
-    for ts, files in groups.items():
-        # The folder name will be the timestamp itself (or prefixed with type)
-        folder_name = ts
-        upload_backup_set(session, validation_key, parent_id, folder_name, files)
-
-    # Clean up old folders (based on retention days)
-    if retention_days > 0:
-        cleanup_old_folders(session, validation_key, parent_id, retention_days)
-
-# -------------------------
-# main
-# -------------------------
-def main():
-    with requests.Session() as session:
-        vk = login(session)
-        log(f"Logged in, validationKey: {vk[:8]}...")
-
-        # Process Docker backups - catch errors so storage backup still runs
-        try:
-            sync_local_backups(session, vk, DOCKER_FOLDER_ID, LOCAL_DOCKER_ROOT,
-                               backup_type="docker", retention_days=RETENTION_DAYS)
-        except Exception as e:
-            log(f"ERROR while syncing Docker backups: {e}. Continuing with storage backups.")
-
-        # Process DAR (gocryptfs) backups
-        try:
-            sync_local_backups(session, vk, STORAGE_FOLDER_ID, LOCAL_STORAGE_ROOT,
-                               backup_type="dar", retention_days=RETENTION_DAYS)
-        except Exception as e:
-            log(f"ERROR while syncing storage backups: {e}.")
+    # ---- WEEKLY FULL CHECKSUM VERIFICATION ----
+    run_weekly_checksum_if_needed()
 
 if __name__ == "__main__":
     main()
