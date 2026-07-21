@@ -312,8 +312,19 @@ def sync_backups(root_path: str, local_root: Path, backup_type: str) -> bool:
     current_subs = rclone_list(current_path)
     current_base = sorted(current_subs)[-1] if current_subs else None
 
-    to_process = {ts: files for ts, files in groups.items()
-                  if not current_base or ts > current_base}
+    # If the timestamp folder already exists in current/ but the local backup is still on disk,
+    # it could be an interrupted upload. We add it to to_process so rclone can verify.
+    to_process = {}
+    for ts, files in groups.items():
+        if not current_base or ts > current_base:
+            to_process[ts] = files
+        elif current_base and ts == current_base:
+            # Check if files are missing in the cloud
+            remote_files = rclone_list_files(f"{current_path}/{ts}")
+            local_names = {f.name for f in files}
+            if not local_names.issubset(set(remote_files.keys())):
+                log(f"Warning: Timestamp {ts} exists in cloud but is incomplete. Re-adding to upload queue.")
+                to_process[ts] = files
 
     if not to_process:
         log("All backups are already synced.")
