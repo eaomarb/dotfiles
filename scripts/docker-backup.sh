@@ -231,10 +231,8 @@ stop_containers() {
 
 start_containers() {
     for c in "${CONTAINERS_TO_STOP[@]}"; do
-        if [ "${WAS_RUNNING[$c]:-0}" -eq 1 ]; then
-            log "Starting $c"
-            docker start "$c" || log "WARNING: Failed to start $c"
-        fi
+        log "Ensuring $c is running..."
+        docker start "$c" || log "WARNING: Failed to start $c"
     done
     return 0
 }
