@@ -5,7 +5,7 @@ set -euo pipefail
 # CONFIGURATION
 # ==============================
 SOURCE_DIR="/data/gocryptfs"
-STAGING_DIR="/backups/gocryptfs"
+STAGING_DIR="/data2/backups/gocryptfs"
 LOG_FILE="/var/log/dar_backup.log"
 LOCK_FILE="/var/lock/gocryptfs-backup.lock"
 
@@ -16,7 +16,7 @@ LAST_FULL_FILE="$STAGING_DIR/last_full"
 LAST_SUCCESS="$STAGING_DIR/last_success"
 
 ROTATION_THRESHOLD_GB=15
-MIN_FREE_SPACE_MARGIN=$((15 * 1024 * 1024 * 1024))   # 15 GB
+MIN_FREE_SPACE_MARGIN=$((50 * 1024 * 1024 * 1024))   # 50 GB
 
 VALID_REF=""
 SOURCE_SIZE_BYTES=0
@@ -52,10 +52,12 @@ check_binaries() {
 
 check_dirs() {
     log "Checking directories..."
+    [ -d "$SOURCE_DIR" ] || { log "ERROR: $SOURCE_DIR missing"; exit 1; }
+    [ "$(df --output=target "$SOURCE_DIR" | tail -1)" != "/" ] || { log "ERROR: $SOURCE_DIR not mounted"; exit 1; }
     mkdir -p "$STAGING_DIR" || { log "ERROR: Cannot create $STAGING_DIR"; exit 1; }
+    [ "$(df --output=target "$STAGING_DIR" | tail -1)" != "/" ] || { log "ERROR: $STAGING_DIR not mounted"; exit 1; }
     mkdir -p "$(dirname "$LOG_FILE")" || { log "ERROR: Cannot create log directory"; exit 1; }
     mkdir -p /var/lock || { log "ERROR: Cannot create /var/lock"; exit 1; }
-    [ -d "$SOURCE_DIR" ] || { log "ERROR: $SOURCE_DIR missing"; exit 1; }
     log "Directories OK."
 }
 
@@ -185,7 +187,7 @@ rotate_by_space() {
 
     log "Total size of incremental data slices: $total bytes ($((total/1024/1024/1024)) GB)"
 
-    local SAFETY_LIMIT=$((100 * 1024 * 1024 * 1024))
+    local SAFETY_LIMIT=$((200 * 1024 * 1024 * 1024))
     if (( total > SAFETY_LIMIT )); then
         log "ERROR: Incremental total ($((total/1024/1024/1024)) GB) exceeds safety limit (100 GB). Aborting."
         exit 1
