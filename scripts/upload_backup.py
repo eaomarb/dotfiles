@@ -28,7 +28,7 @@ RCLONE_CONFIG = os.getenv("RCLONE_CONFIG", "/home/omar/.config/rclone/rclone.con
 DOCKER_ROOT_PATH = "Backups/Server/Docker"
 STORAGE_ROOT_PATH = "Backups/Server/Gocryptfs"
 LOCAL_DOCKER_ROOT = Path("/backups/docker")
-LOCAL_STORAGE_ROOT = Path("/backups/gocryptfs")
+LOCAL_STORAGE_ROOT = Path("/data2/backups/gocryptfs")
 
 LOG_FILE = "/opt/backup-uploader/cloud_backup_sync.log"
 MAX_RETRIES = 3
