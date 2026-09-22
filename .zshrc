@@ -48,71 +48,18 @@ zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 # --- Official plugins (dnf, /usr/share) ---
 source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 
-# --- Unofficial plugins (cloned by setup.sh) ---
-source "$ZSH_PLUGINS/zsh-history-substring-search/zsh-history-substring-search.zsh"
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
-
-# fzf: keybindings + completion (dnf package) — before fzf-tab
+# --- fzf: keybindings + completion (dnf package) — before fzf-tab ---
 [[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && \
   source /usr/share/fzf/shell/key-bindings.zsh
 [[ -f /usr/share/fzf/shell/completion.zsh ]] && \
   source /usr/share/fzf/shell/completion.zsh
 
-# fzf-tab: must load after compinit
+# --- fzf-tab: must load after compinit ---
 source "$ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
 zstyle ':fzf-tab:*' fzf-flags --height=50%
 
-# syntax-highlighting: ALWAYS last among plugins
+# --- syntax-highlighting: ALWAYS last among plugins ---
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-
-# --- Automatic keybindings based on terminfo ---
-
-# Ensure Emacs keymap is active (the standard)
-bindkey -e
-
-# Helper function to avoid repeating logic in .zshrc
-function _bindkey_from_terminfo() {
-  # $1 = terminfo capability name (e.g. kcuu1)
-  # $2 = Zsh widget name to bind to (e.g. backward-word)
-  local terminfo_code="${terminfo[$1]}"
-  if [[ -n "$terminfo_code" ]]; then
-    bindkey "$terminfo_code" "$2"
-  fi
-}
-
-# --- Navigation keys ---
-_bindkey_from_terminfo kcuu1  up-line-or-history         # Up arrow
-_bindkey_from_terminfo kcud1  down-line-or-history       # Down arrow
-_bindkey_from_terminfo kcub1  backward-char              # Left arrow
-_bindkey_from_terminfo kcuf1  forward-char               # Right arrow
-
-# --- Home and End ---
-_bindkey_from_terminfo khome  beginning-of-line          # Home
-_bindkey_from_terminfo kend   end-of-line                # End
-
-# --- Delete ---
-_bindkey_from_terminfo kdch1  delete-char                # Delete key
-
-# --- Word navigation (Alt or Ctrl + arrows) ---
-# Alt + Left/Right
-_bindkey_from_terminfo kLFT   backward-word              # Alt + Left
-_bindkey_from_terminfo kRIT   forward-word               # Alt + Right
-
-# Note: Ctrl + arrows sometimes has no standard terminfo capability.
-# If it doesn't work, it can be added manually, but Alt is usually enough.
-# For Ctrl + arrows, uncomment and adjust if needed:
-# bindkey "^[[1;5D" backward-word
-# bindkey "^[[1;5C" forward-word
-
-# --- Word navigation (Alt + B/F, universal) ---
-# These are Emacs shortcuts that almost always work without extra config
-bindkey "^[b" backward-word   # Alt + B
-bindkey "^[f" forward-word    # Alt + F
-
-# --- Word deletion ---
-_bindkey_from_terminfo kDC    kill-word                  # Ctrl + Delete (if applicable)
-_bindkey_from_terminfo kbs    backward-delete-char       # Backspace
 
 # --- Tools with own init ---
 eval "$(starship init zsh)"
@@ -140,6 +87,35 @@ alias duc="docker compose up -d"
 alias c="clear"
 alias C="clear"
 alias CD="cd"
+
+# --- Keybindings (MUST be last) ---
+bindkey -e
+
+autoload -U up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+
+# Bind both normal and application mode sequences
+bindkey '^[[A' up-line-or-beginning-search    # Normal mode
+bindkey '^[OA' up-line-or-beginning-search    # Application mode
+bindkey '^[[B' down-line-or-beginning-search
+bindkey '^[OB' down-line-or-beginning-search
+
+bindkey '^[[C' forward-char
+bindkey '^[OC' forward-char
+bindkey '^[[D' backward-char
+bindkey '^[OD' backward-char
+
+bindkey '^[[H' beginning-of-line
+bindkey '^[OH' beginning-of-line
+bindkey '^[[F' end-of-line
+bindkey '^[OF' end-of-line
+
+bindkey '^[[3~' delete-char
+bindkey '^[[1;3C' forward-word
+bindkey '^[[1;3D' backward-word
+bindkey '^[b' backward-word
+bindkey '^[f' forward-word
 
 # --- Optional local overrides (not tracked) ---
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
