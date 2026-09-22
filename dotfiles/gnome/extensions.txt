@@ -1,0 +1,14 @@
+display-brightness-ddcutil@themightydeity.github.com
+just-perfection-desktop@just-perfection
+freon@UshakovVasilii_Github.yahoo.com
+appindicatorsupport@rgcjonas.gmail.com
+aztaskbar@aztaskbar.gitlab.com
+blur-my-shell@aunetx
+drive-menu@gnome-shell-extensions.gcampax.github.com
+unblank@sun.wxg@gmail.com
+system-monitor@gnome-shell-extensions.gcampax.github.com
+apps-menu@gnome-shell-extensions.gcampax.github.com
+background-logo@fedorahosted.org
+launch-new-instance@gnome-shell-extensions.gcampax.github.com
+places-menu@gnome-shell-extensions.gcampax.github.com
+window-list@gnome-shell-extensions.gcampax.github.com
