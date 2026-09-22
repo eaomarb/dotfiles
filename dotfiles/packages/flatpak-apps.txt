@@ -1,3 +1,21 @@
 # One Flatpak app ID per line, e.g.:
 # com.bitwarden.desktop
 # org.gnome.Extensions
+ai.jan.Jan
+app.zen_browser.zen
+com.github.tchx84.Flatseal
+com.mattjakeman.ExtensionManager
+com.spotify.Client
+com.tutanota.Tutanota
+com.valvesoftware.Steam
+com.visualstudio.code
+es.gob.afirma
+io.anytype.anytype
+io.github.manisandro.gImageReader
+it.mijorus.gearlever
+net.nokyan.Resources
+org.gnome.FileRoller
+org.gnome.seahorse.Application
+org.kde.okular
+org.mozilla.firefox
+org.pvermeer.WebAppHub
