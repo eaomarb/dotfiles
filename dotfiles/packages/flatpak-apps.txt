@@ -1,0 +1,3 @@
+# One Flatpak app ID per line, e.g.:
+# com.bitwarden.desktop
+# org.gnome.Extensions

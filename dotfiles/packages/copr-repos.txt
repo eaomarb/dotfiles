@@ -1,0 +1,2 @@
+# One COPR repo per line, e.g.:
+# author/package

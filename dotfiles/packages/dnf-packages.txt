@@ -1,0 +1,12 @@
+# Shell
+zsh
+zsh-autosuggestions
+zsh-syntax-highlighting
+
+# CLI tools
+bat
+ripgrep
+fzf
+zoxide
+fd-find
+lsd
