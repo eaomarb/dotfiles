@@ -10,3 +10,17 @@ fzf
 zoxide
 fd-find
 lsd
+rclone
+lm_sensors
+
+# Graphics / media diagnostics
+libva-utils
+vulkan-tools
+
+# 32-bit Mesa (Steam/Proton)
+mesa-dri-drivers.i686
+mesa-vulkan-drivers.i686
+
+# COPR packages
+gnome-rounded-blur
+nautilus-my-computer
