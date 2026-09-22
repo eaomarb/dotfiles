@@ -66,10 +66,53 @@ zstyle ':fzf-tab:*' fzf-flags --height=50%
 # syntax-highlighting: ALWAYS last among plugins
 source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-# --- Base keybindings ---
+# --- Automatic keybindings based on terminfo ---
+
+# Ensure Emacs keymap is active (the standard)
 bindkey -e
-bindkey '^[[H' beginning-of-line
-bindkey '^[[F' end-of-line
+
+# Helper function to avoid repeating logic in .zshrc
+function _bindkey_from_terminfo() {
+  # $1 = terminfo capability name (e.g. kcuu1)
+  # $2 = Zsh widget name to bind to (e.g. backward-word)
+  local terminfo_code="${terminfo[$1]}"
+  if [[ -n "$terminfo_code" ]]; then
+    bindkey "$terminfo_code" "$2"
+  fi
+}
+
+# --- Navigation keys ---
+_bindkey_from_terminfo kcuu1  up-line-or-history         # Up arrow
+_bindkey_from_terminfo kcud1  down-line-or-history       # Down arrow
+_bindkey_from_terminfo kcub1  backward-char              # Left arrow
+_bindkey_from_terminfo kcuf1  forward-char               # Right arrow
+
+# --- Home and End ---
+_bindkey_from_terminfo khome  beginning-of-line          # Home
+_bindkey_from_terminfo kend   end-of-line                # End
+
+# --- Delete ---
+_bindkey_from_terminfo kdch1  delete-char                # Delete key
+
+# --- Word navigation (Alt or Ctrl + arrows) ---
+# Alt + Left/Right
+_bindkey_from_terminfo kLFT   backward-word              # Alt + Left
+_bindkey_from_terminfo kRIT   forward-word               # Alt + Right
+
+# Note: Ctrl + arrows sometimes has no standard terminfo capability.
+# If it doesn't work, it can be added manually, but Alt is usually enough.
+# For Ctrl + arrows, uncomment and adjust if needed:
+# bindkey "^[[1;5D" backward-word
+# bindkey "^[[1;5C" forward-word
+
+# --- Word navigation (Alt + B/F, universal) ---
+# These are Emacs shortcuts that almost always work without extra config
+bindkey "^[b" backward-word   # Alt + B
+bindkey "^[f" forward-word    # Alt + F
+
+# --- Word deletion ---
+_bindkey_from_terminfo kDC    kill-word                  # Ctrl + Delete (if applicable)
+_bindkey_from_terminfo kbs    backward-delete-char       # Backspace
 
 # --- Tools with own init ---
 eval "$(starship init zsh)"
