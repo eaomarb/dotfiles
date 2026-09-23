@@ -21,6 +21,10 @@ setopt PUSHD_IGNORE_DUPS
 setopt INTERACTIVE_COMMENTS
 setopt NO_BEEP
 
+# Remove '/' from WORDCHARS so paths are word-separated.
+# Must be set BEFORE compinit so completion uses the same word boundaries.
+WORDCHARS=${WORDCHARS//[\/.\-_]/}
+
 # --- Environment ---
 export EDITOR="nano"
 export VISUAL="$EDITOR"
@@ -91,31 +95,46 @@ alias CD="cd"
 # --- Keybindings (MUST be last) ---
 bindkey -e
 
+# History search on arrow keys
 autoload -U up-line-or-beginning-search down-line-or-beginning-search
 zle -N up-line-or-beginning-search
 zle -N down-line-or-beginning-search
 
-# Bind both normal and application mode sequences
-bindkey '^[[A' up-line-or-beginning-search    # Normal mode
-bindkey '^[OA' up-line-or-beginning-search    # Application mode
+bindkey '^[[A' up-line-or-beginning-search    # Up (normal mode)
+bindkey '^[OA' up-line-or-beginning-search    # Up (application mode)
 bindkey '^[[B' down-line-or-beginning-search
 bindkey '^[OB' down-line-or-beginning-search
 
+# Arrow keys (char navigation)
 bindkey '^[[C' forward-char
 bindkey '^[OC' forward-char
 bindkey '^[[D' backward-char
 bindkey '^[OD' backward-char
 
+# Home / End
 bindkey '^[[H' beginning-of-line
 bindkey '^[OH' beginning-of-line
 bindkey '^[[F' end-of-line
 bindkey '^[OF' end-of-line
 
-bindkey '^[[3~' delete-char
+# Delete
+bindkey '^[[3~'   delete-char
+bindkey '^[[3;3~' backward-kill-word   # Alt+Delete
+bindkey '^[[3;5~' kill-word            # Ctrl+Delete
+
+# Alt + Left / Right → word navigation
 bindkey '^[[1;3C' forward-word
 bindkey '^[[1;3D' backward-word
 bindkey '^[b' backward-word
 bindkey '^[f' forward-word
+
+# Ctrl + Left / Right → word navigation
+bindkey '^[[1;5C' forward-word
+bindkey '^[[1;5D' backward-word
+
+# PageUp / PageDown → history navigation
+[[ -n "${terminfo[kpp]}" ]] && bindkey "${terminfo[kpp]}" up-line-or-history
+[[ -n "${terminfo[knp]}" ]] && bindkey "${terminfo[knp]}" down-line-or-history
 
 # --- Optional local overrides (not tracked) ---
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
