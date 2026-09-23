@@ -1,0 +1,19 @@
+[Desktop Entry]
+Categories=Network
+Exec=flatpak run org.mozilla.firefox --class=wah-StfmYFIq --name=wah-StfmYFIq --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/StfmYFIq --no-remote https://claude.ai
+Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/StfmYFIq.png
+Name=Claude
+StartupWMClass=wah-StfmYFIq
+Terminal=false
+Type=Application
+Version=1.0
+X-MultipleArgs=false
+X-WAH=true
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-ID=StfmYFIq
+X-WAH-ISOLATE=true
+X-WAH-MAXIMIZE=false
+X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/StfmYFIq
+X-WAH-URL=https://claude.ai
+X-WAH-VERSION=1.2.0
+

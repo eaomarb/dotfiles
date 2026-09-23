@@ -1,0 +1,19 @@
+[Desktop Entry]
+Categories=Network
+Exec=flatpak run org.mozilla.firefox --class=wah-aYhLPXck --name=wah-aYhLPXck --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/aYhLPXck --no-remote https://www.icloud.com/
+Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/aYhLPXck.png
+Name=iCloud
+StartupWMClass=wah-aYhLPXck
+Terminal=false
+Type=Application
+Version=1.0
+X-MultipleArgs=false
+X-WAH=true
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-ID=aYhLPXck
+X-WAH-ISOLATE=true
+X-WAH-MAXIMIZE=false
+X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/aYhLPXck
+X-WAH-URL=https://www.icloud.com/
+X-WAH-VERSION=1.2.0
+

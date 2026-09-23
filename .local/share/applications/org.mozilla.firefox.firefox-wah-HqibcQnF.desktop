@@ -1,0 +1,19 @@
+[Desktop Entry]
+Categories=Network
+Exec=flatpak run org.mozilla.firefox --class=wah-HqibcQnF --name=wah-HqibcQnF --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/HqibcQnF --no-remote https://chatgpt.com
+Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/HqibcQnF.png
+Name=ChatGPT
+StartupWMClass=wah-HqibcQnF
+Terminal=false
+Type=Application
+Version=1.0
+X-MultipleArgs=false
+X-WAH=true
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-ID=HqibcQnF
+X-WAH-ISOLATE=true
+X-WAH-MAXIMIZE=false
+X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/HqibcQnF
+X-WAH-URL=https://chatgpt.com
+X-WAH-VERSION=1.2.0
+
