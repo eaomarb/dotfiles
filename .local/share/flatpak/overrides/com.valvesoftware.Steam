@@ -1,0 +1,8 @@
+[Context]
+filesystems=/home/omar/Games/Grand Theft Auto San Andreas
+
+[Environment]
+TMPDIR=/tmp
+
+[Session Bus Policy]
+org.freedesktop.Flatpak=talk
