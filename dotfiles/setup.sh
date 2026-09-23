@@ -51,7 +51,7 @@ mapfile -t FLATPAK_APPS < <(read_list "$PKG_DIR/flatpak-apps.txt")
 if [[ ${#FLATPAK_APPS[@]} -gt 0 ]]; then
   flatpak remote-add --if-not-exists flathub \
     https://flathub.org/repo/flathub.flatpakrepo
-  flatpak install -y flathub "${FLATPAK_APPS[@]}"
+  sudo flatpak install -y flathub "${FLATPAK_APPS[@]}"
 fi
 
 # --- 4. mise (official installer, no COPR) ---
