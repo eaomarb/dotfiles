@@ -93,3 +93,11 @@ ZSH_BIN="$(command -v zsh)"
 if [[ "$SHELL" != "$ZSH_BIN" ]]; then
   chsh -s "$ZSH_BIN"
 fi
+
+# --- 10. User scripts (symlink from ~/dotfiles/scripts to ~/.local/bin) ---
+if [[ -d "$DOTFILES/scripts" ]]; then
+  for script in "$DOTFILES/scripts"/*; do
+    [[ -f "$script" ]] || continue
+    ln -sf "$script" "$HOME/.local/bin/$(basename "$script")"
+  done
+fi
