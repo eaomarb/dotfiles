@@ -101,3 +101,9 @@ if [[ -d "$DOTFILES/scripts" ]]; then
     ln -sf "$script" "$HOME/.local/bin/$(basename "$script")"
   done
 fi
+
+# --- 11. Freebuff container image (if Containerfile exists) ---
+FREEBUFF_CF="$DOTFILES/containers/freebuff/Containerfile"
+if [[ -f "$FREEBUFF_CF" ]] && ! podman image exists localhost/freebuff-image:latest; then
+  podman build -t localhost/freebuff-image:latest -f "$FREEBUFF_CF" "$(dirname "$FREEBUFF_CF")"
+fi
