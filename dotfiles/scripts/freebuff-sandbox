@@ -1,5 +1,5 @@
 #!/bin/bash
-# freebuff-sandbox: runs Freebuff in a Podman container with an isolated home
+# freebuff-sandbox: runs Freebuff using the locally built image
 
 PROJECT_DIR="$(pwd)"
 FREEBUFF_HOME_DIR="$HOME/.freebuff-home"
@@ -7,20 +7,9 @@ FREEBUFF_HOME_DIR="$HOME/.freebuff-home"
 mkdir -p "$FREEBUFF_HOME_DIR"
 
 exec podman run --rm -it \
-  --userns=keep-id:uid=1000,gid=1000 \
-  --user 1000:1000 \
-  -v "$PROJECT_DIR:/workspace:rw" \
-  -v "$FREEBUFF_HOME_DIR:/home/node:rw,U,Z" \
-  -v "$HOME/.gitconfig:/home/node/.gitconfig:ro,Z" \
+  --userns=keep-id \
+  -v "$PROJECT_DIR:/workspace:rw,Z" \
+  -v "$FREEBUFF_HOME_DIR:/root:rw,Z" \
   -w /workspace \
-  -e HOME=/home/node \
-  -e npm_config_prefix=/home/node/.npm-global \
-  -e npm_config_cache=/tmp/.npm \
-  -e PATH=/home/node/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-  node:20 \
-  sh -c '
-    if ! command -v freebuff >/dev/null 2>&1; then
-      npm install -g freebuff
-    fi
-    exec freebuff "$@"
-  ' -- "$@"
+  localhost/freebuff-image:latest \
+  freebuff "$@"

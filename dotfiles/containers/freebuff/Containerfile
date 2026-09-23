@@ -1,0 +1,15 @@
+FROM node:20-bookworm
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc g++ make python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g freebuff
+
+RUN cd /usr/local/lib/node_modules/freebuff/node_modules/node-pty 2>/dev/null && \
+    npm rebuild --build-from-source || true
+
+RUN find /usr/local/lib/node_modules -name 'spawn-helper' -exec chmod +x {} \; || true
+
+WORKDIR /workspace
