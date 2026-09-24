@@ -1,0 +1,24 @@
+FROM fedora:44
+
+RUN dnf -y install \
+      git \
+      ripgrep \
+      fd-find \
+      jq \
+      curl \
+      ca-certificates \
+      make \
+      gcc \
+      gcc-c++ \
+      tar \
+      unzip \
+      which \
+      openssh-clients \
+    && dnf clean all
+
+RUN useradd -u 1000 -m -s /bin/bash dev
+
+# mise installed system-wide (not in the home, which gets shadowed by the bind mount)
+RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+
+ENV PATH=/home/dev/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

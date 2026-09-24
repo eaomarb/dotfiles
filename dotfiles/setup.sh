@@ -107,3 +107,9 @@ FREEBUFF_CF="$DOTFILES/containers/freebuff/Containerfile"
 if [[ -f "$FREEBUFF_CF" ]] && ! podman image exists localhost/freebuff-image:latest; then
   podman build -t localhost/freebuff-image:latest -f "$FREEBUFF_CF" "$(dirname "$FREEBUFF_CF")"
 fi
+
+# --- 11b. dev-base image (if Containerfile exists) ---
+DEV_BASE_CF="$DOTFILES/containers/dev-base/Containerfile"
+if [[ -f "$DEV_BASE_CF" ]] && ! podman image exists localhost/dev-base:latest; then
+  podman build -t localhost/dev-base:latest -f "$DEV_BASE_CF" "$(dirname "$DEV_BASE_CF")"
+fi

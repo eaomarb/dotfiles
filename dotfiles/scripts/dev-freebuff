@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(realpath "$PWD")"
+
+if [[ "$(basename "$ROOT")" == "workspace" ]]; then
+  echo "Run this script from the project root, not from workspace/." >&2
+  exit 1
+fi
+
+IMAGE="localhost/freebuff-image:latest"
+if ! podman image exists "$IMAGE"; then
+  echo "Image $IMAGE not found. Build it first (run setup.sh or podman build)." >&2
+  exit 1
+fi
+
+mkdir -p "$ROOT/workspace" "$ROOT/home"
+
+exec podman run --rm -it \
+  --userns=keep-id:uid="$(id -u)",gid="$(id -g)" \
+  --user "$(id -u):$(id -g)" \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --mount type=bind,src="$ROOT/workspace",dst=/workspace,relabel=private \
+  --mount type=bind,src="$ROOT/home",dst=/home/dev,relabel=private \
+  --mount type=bind,src="${XDG_RUNTIME_DIR}/wayland-0",dst=/tmp/wayland-0,relabel=private \
+  -e WAYLAND_DISPLAY=wayland-0 \
+  -e XDG_RUNTIME_DIR=/tmp \
+  -e HOME=/home/dev \
+  -e TERM="${TERM:-xterm-256color}" \
+  -w /workspace \
+  "$IMAGE" \
+  bash
