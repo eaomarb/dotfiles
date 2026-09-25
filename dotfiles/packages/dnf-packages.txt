@@ -24,3 +24,5 @@ mesa-vulkan-drivers.i686
 # COPR packages
 gnome-rounded-blur
 nautilus-my-computer
+podman-docker
+podman-compose

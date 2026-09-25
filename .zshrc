@@ -88,6 +88,7 @@ alias mkdir='mkdir -p'
 
 # --- Custom aliases ---
 alias duc="docker compose up -d"
+alias puc="podman-compose up -d"
 alias c="clear"
 alias C="clear"
 alias CD="cd"
