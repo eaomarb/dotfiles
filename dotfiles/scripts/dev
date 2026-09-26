@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- Flags ---
+CTL=0
+for arg in "$@"; do
+  case "$arg" in
+    --ctl) CTL=1 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
 ROOT="$(realpath "$PWD")"
 
 if [[ "$(basename "$ROOT")" == "workspace" ]]; then
@@ -16,6 +25,21 @@ fi
 
 mkdir -p "$ROOT/workspace" "$ROOT/home"
 
+# --- Optional host Podman control (--ctl) ---
+CTL_ARGS=()
+if [[ "$CTL" -eq 1 ]]; then
+  SOCK="${XDG_RUNTIME_DIR}/podman/podman.sock"
+  if [[ ! -S "$SOCK" ]]; then
+    echo "Podman socket not found at $SOCK" >&2
+    echo "Enable it first: systemctl --user enable --now podman.socket" >&2
+    exit 1
+  fi
+  CTL_ARGS+=(
+    --mount "type=bind,src=${SOCK},dst=/run/podman/podman.sock"
+    -e "CONTAINER_HOST=unix:///run/podman/podman.sock"
+  )
+fi
+
 exec podman run --rm -it \
   --userns=keep-id:uid="$(id -u)",gid="$(id -g)" \
   --user "$(id -u):$(id -g)" \
@@ -24,6 +48,7 @@ exec podman run --rm -it \
   --security-opt=no-new-privileges \
   --mount type=bind,src="$ROOT/workspace",dst=/workspace,relabel=private \
   --mount type=bind,src="$ROOT/home",dst=/home/dev,relabel=private \
+  "${CTL_ARGS[@]}" \
   -e HOME=/home/dev \
   -e TERM="${TERM:-xterm-256color}" \
   -w /workspace \

@@ -14,9 +14,13 @@ RUN dnf -y install \
       unzip \
       which \
       openssh-clients \
+      podman \
     && dnf clean all
 
 RUN useradd -u 1000 -m -s /bin/bash dev
+
+# shim docker -> podman
+RUN ln -sf /usr/bin/podman /usr/local/bin/docker
 
 # mise installed system-wide (not in the home, which gets shadowed by the bind mount)
 RUN curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
