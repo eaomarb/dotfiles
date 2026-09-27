@@ -5,6 +5,15 @@ set -euo pipefail
 # the image is to let the agent inspect the host compose stack.
 # It is NOT a security boundary — the socket allows escaping to $HOME.
 
+# --- Flags ---
+SHELL_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    --shell) SHELL_MODE=1 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
 ROOT="$(realpath "$PWD")"
 
 if [[ "$(basename "$ROOT")" == "workspace" ]]; then
@@ -27,6 +36,13 @@ if [[ ! -S "$SOCK" ]]; then
   exit 1
 fi
 
+# Default: opencode TUI. With --shell: drop into bash in the same container.
+if [[ "$SHELL_MODE" -eq 1 ]]; then
+  CMD=(bash)
+else
+  CMD=(opencode)
+fi
+
 exec podman run --rm -it \
   --userns=keep-id:uid="$(id -u)",gid="$(id -g)" \
   --user "$(id -u):$(id -g)" \
@@ -42,4 +58,4 @@ exec podman run --rm -it \
   -e TERM="${TERM:-xterm-256color}" \
   -w /workspace \
   "$IMAGE" \
-  opencode
+  "${CMD[@]}"
