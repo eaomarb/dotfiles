@@ -1,0 +1,9 @@
+FROM localhost/dev-base:latest
+
+# opencode — official installer, pinned to /usr/local/bin so it's on PATH
+# for the non-root runtime user (HOME is bind-mounted from the project).
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && install -m 0755 /root/.opencode/bin/opencode /usr/local/bin/opencode \
+    || install -m 0755 /root/.local/bin/opencode /usr/local/bin/opencode
+
+WORKDIR /workspace

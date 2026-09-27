@@ -113,3 +113,9 @@ DEV_BASE_CF="$DOTFILES/containers/dev-base/Containerfile"
 if [[ -f "$DEV_BASE_CF" ]] && ! podman image exists localhost/dev-base:latest; then
   podman build -t localhost/dev-base:latest -f "$DEV_BASE_CF" "$(dirname "$DEV_BASE_CF")"
 fi
+
+# --- 11c. opencode image (if Containerfile exists) ---
+OPENCODE_CF="$DOTFILES/containers/opencode/Containerfile"
+if [[ -f "$OPENCODE_CF" ]] && ! podman image exists localhost/opencode:latest; then
+  podman build -t localhost/opencode:latest -f "$OPENCODE_CF" "$(dirname "$OPENCODE_CF")"
+fi

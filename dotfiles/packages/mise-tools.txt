@@ -1,3 +1,4 @@
 # One tool per line, e.g.:
 # node@20
 # python@3.12
+node
