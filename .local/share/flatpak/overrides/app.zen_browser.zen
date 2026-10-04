@@ -1,6 +1,6 @@
 [Context]
 devices=dri
-filesystems=/tmp/mozilla
+filesystems=/tmp
 
 [Session Bus Policy]
 org.gnome.SessionManager=talk

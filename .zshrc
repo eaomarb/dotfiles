@@ -139,3 +139,4 @@ bindkey '^[[1;5D' backward-word
 
 # --- Optional local overrides (not tracked) ---
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+[[ -f ~/.secrets.zsh ]] && source ~/.secrets.zsh

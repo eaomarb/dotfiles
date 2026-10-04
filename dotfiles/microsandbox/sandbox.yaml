@@ -1,0 +1,31 @@
+# microsandbox sandbox definition — the base VM, as code
+# Lives in the dotfiles repo (yadm-tracked): survives reinstalls, the rebuild source of truth.
+# Docs: docs.microsandbox.dev/cli/configuration.md (sparse config; CLI args override)
+
+image: node:24        # Debian-based, Node >=22.19 + npm built in (Pi + opencode)
+cpus: 2
+memory: 4G            # 16 GB host: bump to 6-8G if Pi/web feels cramped
+shell: /bin/bash      # interactive sessions default to bash instead of /bin/sh
+workdir: /root        # sessions open here → pi's chats group under one folder in ~/.pi/agent/sessions
+ports:
+  - "30141:30141"     # pi-web → host browser: http://localhost:30141
+
+mounts:
+  # Absolute host paths on purpose (relative resolve against this file's location).
+  # /root mounted WHOLE: every tool's config/data/auth lands on the host by construction
+  # (no dotdir whack-a-mole). Pi's binary (/root/.pi/agent/bin) survives rm+recreate too.
+  # Caches: ~/Pi/.cache grows — clean with ncdu, or add --tmpfs /root/.cache later.
+  - /home/omar/Pi:/root
+  - /home/omar/Dev:/work   # all projects, zero daily flags.
+                           # Rule: untrusted/experimental repos NEVER enter ~/Dev —
+                           # throwaway VM instead: msb run node:24 -v /path/to/repo:/work
+
+# secrets: host env vars referenced, NEVER inlined here (msb reads values at start
+# time — they never touch config or snapshots). Pass on the create command, e.g.:
+#   export ZAI_API_KEY=... ANTHROPIC_API_KEY=...
+#   msb create --conf sandbox.yaml --name pi \
+#     --secret ZAI_API_KEY@api.z.ai --secret ANTHROPIC_API_KEY@api.anthropic.com
+# (also available as a --secret-conf name-map file if the CLI line gets long)
+
+# Future hardening (NOT for the trial — pi-web search needs broad egress):
+#   --no-net + --net-rule allow@<target>  → egress allowlist (only the API hosts)
