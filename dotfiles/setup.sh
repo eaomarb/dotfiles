@@ -102,20 +102,22 @@ if [[ -d "$DOTFILES/scripts" ]]; then
   done
 fi
 
-# --- 11. Freebuff container image (if Containerfile exists) ---
-FREEBUFF_CF="$DOTFILES/containers/freebuff/Containerfile"
-if [[ -f "$FREEBUFF_CF" ]] && ! podman image exists localhost/freebuff-image:latest; then
-  podman build -t localhost/freebuff-image:latest -f "$FREEBUFF_CF" "$(dirname "$FREEBUFF_CF")"
-fi
-
-# --- 11b. dev-base image (if Containerfile exists) ---
-DEV_BASE_CF="$DOTFILES/containers/dev-base/Containerfile"
-if [[ -f "$DEV_BASE_CF" ]] && ! podman image exists localhost/dev-base:latest; then
-  podman build -t localhost/dev-base:latest -f "$DEV_BASE_CF" "$(dirname "$DEV_BASE_CF")"
-fi
-
-# --- 11c. opencode image (if Containerfile exists) ---
-OPENCODE_CF="$DOTFILES/containers/opencode/Containerfile"
-if [[ -f "$OPENCODE_CF" ]] && ! podman image exists localhost/opencode:latest; then
-  podman build -t localhost/opencode:latest -f "$OPENCODE_CF" "$(dirname "$OPENCODE_CF")"
+# --- 12. microsandbox (official installer; manual updates only, no cron) ---
+# Agent sandboxing: microVM per sandbox — definition in microsandbox/sandbox.yaml.
+# After install: create the base VM (Pi + opencode + pi-web inside), snapshot = base image.
+# Inside the base VM, install:
+#   Pi:       curl -fsSL https://pi.dev/install.sh | sh
+#             (official installer — npm under the hood, needs Node >=22.19;
+#              node:24 base image (Active LTS) has it. Equivalent npm command, if ever needed:
+#              npm install -g --ignore-scripts @earendil-works/pi-coding-agent)
+#   opencode: curl -fsSL https://opencode.ai/v2/install | bash  (standalone binary,
+#             no Node needed; npm alternative: npm i -g opencode-ai)
+#   pi-web:   inside the VM: echo 'prefix=/root/.local' > /root/.npmrc
+#             npm i -g --allow-scripts=@agegr/pi-web,node-pty,@google/genai,protobufjs,esbuild @agegr/pi-web
+#             (prefix under /root = on the mounted ~/Pi → survives recreates;
+#              --allow-scripts is mandatory — node:24's npm blocks install scripts by default)
+#   API keys: free-key trial via /login inside the VM; paid keys later as host-side
+#             msb --secret refs (values never typed inside the VM)
+if ! command -v msb >/dev/null 2>&1; then
+  curl -fsSL https://install.microsandbox.dev | sh
 fi
