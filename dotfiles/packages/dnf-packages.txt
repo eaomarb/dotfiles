@@ -26,3 +26,4 @@ gnome-rounded-blur
 nautilus-my-computer
 podman-docker
 podman-compose
+syncthing
