@@ -1,0 +1,19 @@
+[Desktop Entry]
+Categories=Network
+Exec="/usr/bin/python3" "/home/omar/.local/share/wah-defaults/wah_defaults.py" "launch" "--" "flatpak" "run" "org.mozilla.firefox" "--class=wah-fJwlMpvS" "--name=wah-fJwlMpvS" "--profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/fJwlMpvS" "--no-remote"
+Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/fJwlMpvS.png
+Name=Pi
+StartupWMClass=wah-fJwlMpvS
+Terminal=false
+Type=Application
+Version=1.0
+X-MultipleArgs=false
+X-WAH=true
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox_omar
+X-WAH-ID=fJwlMpvS
+X-WAH-ISOLATE=true
+X-WAH-MAXIMIZE=false
+X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/fJwlMpvS
+X-WAH-URL=http://localhost:30141/
+X-WAH-VERSION=1.3.0
+

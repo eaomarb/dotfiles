@@ -92,6 +92,7 @@ alias puc="podman-compose up -d"
 alias c="clear"
 alias C="clear"
 alias CD="cd"
+alias pi="msb exec pi -- bash"
 
 # --- Keybindings (MUST be last) ---
 bindkey -e

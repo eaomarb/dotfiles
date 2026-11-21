@@ -1,6 +1,6 @@
 [Desktop Entry]
 Categories=Network
-Exec=flatpak run org.mozilla.firefox --class=wah-QBacaW7k --name=wah-QBacaW7k --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/QBacaW7k --no-remote https://chat.qwen.ai
+Exec="/usr/bin/python3" "/home/omar/.local/share/wah-defaults/wah_defaults.py" "launch" "--" "flatpak" "run" "org.mozilla.firefox" "--class=wah-QBacaW7k" "--name=wah-QBacaW7k" "--profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/QBacaW7k" "--no-remote"
 Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/QBacaW7k.png
 Name=Qwen
 StartupWMClass=wah-QBacaW7k
@@ -9,11 +9,11 @@ Type=Application
 Version=1.0
 X-MultipleArgs=false
 X-WAH=true
-X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox_omar
 X-WAH-ID=QBacaW7k
 X-WAH-ISOLATE=true
 X-WAH-MAXIMIZE=false
 X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/QBacaW7k
 X-WAH-URL=https://chat.qwen.ai
-X-WAH-VERSION=1.2.0
+X-WAH-VERSION=1.3.0
 

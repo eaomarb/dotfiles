@@ -1,0 +1,21 @@
+# Window dimensions
+window-width = 140
+window-height = 45
+window-save-state = never
+
+# Font
+font-family = "AdwaitaMono Nerd Font"
+font-size = 14
+font-style = Bold
+
+# Cursor
+cursor-style = bar
+
+# Transparency
+background-opacity = 0.5
+
+# Theme
+theme = "Matte Black"
+
+term = xterm-256color
+resize-overlay = never

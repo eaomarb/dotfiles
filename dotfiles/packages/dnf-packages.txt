@@ -3,27 +3,43 @@ zsh
 zsh-autosuggestions
 zsh-syntax-highlighting
 
+# Terminal / GUI
+ghostty
+gnome-tweaks
+
 # CLI tools
 bat
-ripgrep
-fzf
-zoxide
+fastfetch
 fd-find
+fzf
 lsd
 rclone
-lm_sensors
+ripgrep
+zoxide
 
-# Graphics / media diagnostics
+# Hardware / graphics diagnostics
+ddcutil
+evtest
 libva-utils
+lm_sensors
 vulkan-tools
 
 # 32-bit Mesa (Steam/Proton)
 mesa-dri-drivers.i686
 mesa-vulkan-drivers.i686
 
+# System / files
+autofs
+firejail
+fuse-libs
+
+# Development
+code
+make
+
 # COPR packages
 gnome-rounded-blur
 nautilus-my-computer
-podman-docker
 podman-compose
+podman-docker
 syncthing

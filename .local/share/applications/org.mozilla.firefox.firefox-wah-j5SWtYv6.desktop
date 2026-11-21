@@ -1,6 +1,6 @@
 [Desktop Entry]
 Categories=Network
-Exec=flatpak run org.mozilla.firefox --class=wah-j5SWtYv6 --name=wah-j5SWtYv6 --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/j5SWtYv6 --no-remote https://chat.z.ai
+Exec="/usr/bin/python3" "/home/omar/.local/share/wah-defaults/wah_defaults.py" "launch" "--" "flatpak" "run" "org.mozilla.firefox" "--class=wah-j5SWtYv6" "--name=wah-j5SWtYv6" "--profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/j5SWtYv6" "--no-remote"
 Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/j5SWtYv6.png
 Name=GLM Z.ai
 StartupWMClass=wah-j5SWtYv6
@@ -9,11 +9,11 @@ Type=Application
 Version=1.0
 X-MultipleArgs=false
 X-WAH=true
-X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox_omar
 X-WAH-ID=j5SWtYv6
 X-WAH-ISOLATE=true
 X-WAH-MAXIMIZE=false
 X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/j5SWtYv6
 X-WAH-URL=https://chat.z.ai
-X-WAH-VERSION=1.2.0
+X-WAH-VERSION=1.3.0
 

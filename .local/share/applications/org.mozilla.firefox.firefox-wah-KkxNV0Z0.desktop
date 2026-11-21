@@ -1,6 +1,6 @@
 [Desktop Entry]
 Categories=Network
-Exec=flatpak run org.mozilla.firefox --class=wah-KkxNV0Z0 --name=wah-KkxNV0Z0 --profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/KkxNV0Z0 --no-remote https://web.whatsapp.com
+Exec="/usr/bin/python3" "/home/omar/.local/share/wah-defaults/wah_defaults.py" "launch" "--" "flatpak" "run" "org.mozilla.firefox" "--class=wah-KkxNV0Z0" "--name=wah-KkxNV0Z0" "--profile=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/KkxNV0Z0" "--no-remote"
 Icon=/home/omar/.var/app/org.pvermeer.WebAppHub/data/web-app-hub/icons/KkxNV0Z0.png
 Name=WhatsApp
 StartupWMClass=wah-KkxNV0Z0
@@ -9,11 +9,11 @@ Type=Application
 Version=1.0
 X-MultipleArgs=false
 X-WAH=true
-X-WAH-BROWSER-ID=org.mozilla.firefox_firefox
+X-WAH-BROWSER-ID=org.mozilla.firefox_firefox_omar
 X-WAH-ID=KkxNV0Z0
 X-WAH-ISOLATE=true
 X-WAH-MAXIMIZE=false
 X-WAH-PROFILE=/home/omar/.var/app/org.mozilla.firefox/data/web-app-hub/profiles/KkxNV0Z0
 X-WAH-URL=https://web.whatsapp.com
-X-WAH-VERSION=1.2.0
+X-WAH-VERSION=1.3.0
 

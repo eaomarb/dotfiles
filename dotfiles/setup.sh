@@ -42,6 +42,21 @@ while read -r repo; do
   sudo dnf copr enable -y "$repo"
 done < <(read_list "$PKG_DIR/copr-repos.txt")
 
+# Visual Studio Code RPM repository
+if grep -Fxq code < <(read_list "$PKG_DIR/dnf-packages.txt"); then
+  sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+  if [[ ! -f /etc/yum.repos.d/vscode.repo ]]; then
+    sudo tee /etc/yum.repos.d/vscode.repo > /dev/null <<'EOF'
+[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
+  fi
+fi
+
 # --- 2. dnf packages ---
 mapfile -t DNF_PKGS < <(read_list "$PKG_DIR/dnf-packages.txt")
 [[ ${#DNF_PKGS[@]} -gt 0 ]] && sudo dnf install -y "${DNF_PKGS[@]}"
