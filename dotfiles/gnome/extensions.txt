@@ -7,6 +7,7 @@ blur-my-shell@aunetx
 drive-menu@gnome-shell-extensions.gcampax.github.com
 unblank@sun.wxg@gmail.com
 system-monitor@gnome-shell-extensions.gcampax.github.com
+noannoyance-g50@local
 apps-menu@gnome-shell-extensions.gcampax.github.com
 background-logo@fedorahosted.org
 launch-new-instance@gnome-shell-extensions.gcampax.github.com
