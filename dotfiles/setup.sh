@@ -30,6 +30,15 @@ read_list() {
   grep -vE '^\s*(#|$)' "$1" || true
 }
 
+confirm() {
+  local answer
+  if [[ ! -t 0 ]]; then
+    printf 'Skipping prompt without a terminal: %s\n' "$1" >&2
+    return 1
+  fi
+  read -r -p "$1 [y/N] " answer && [[ "${answer,,}" == y || "${answer,,}" == yes ]]
+}
+
 # --- 0. RPM Fusion ---
 if ! rpm -q rpmfusion-free-release &>/dev/null; then
   sudo dnf install -y \
@@ -115,6 +124,79 @@ if [[ -d "$DOTFILES/scripts" ]]; then
     [[ -f "$script" ]] || continue
     ln -sf "$script" "$HOME/.local/bin/$(basename "$script")"
   done
+fi
+
+# --- GNOME extensions and settings ---
+EXTENSIONS_FILE="$DOTFILES/gnome/extensions.txt"
+DCONF_BACKUP="$DOTFILES/gnome/dconf-full-backup.ini"
+YADM_ARCHIVE="${XDG_DATA_HOME:-$HOME/.local/share}/yadm/archive"
+
+if [[ -f "$EXTENSIONS_FILE" ]]; then
+  SHELL_VERSION="$(LC_ALL=C gnome-shell --version)"
+  SHELL_VERSION="${SHELL_VERSION#GNOME Shell }"
+  EXTENSION_ZIP="$(mktemp --suffix=.shell-extension.zip)"
+  trap 'rm -f -- "$EXTENSION_ZIP"' EXIT
+  while read -r uuid; do
+    if [[ ! "$uuid" =~ ^[[:alnum:]_.@+-]+$ || "$uuid" == "." || "$uuid" == ".." ]]; then
+      printf 'Invalid GNOME extension UUID: %s\n' "$uuid" >&2
+      continue
+    fi
+    if [[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$uuid/metadata.json" ||
+          -f "/usr/share/gnome-shell/extensions/$uuid/metadata.json" ]]; then
+      continue
+    fi
+    if ! curl -fsSL --get --data-urlencode "shell_version=$SHELL_VERSION" \
+      "https://extensions.gnome.org/download-extension/$uuid.shell-extension.zip" -o "$EXTENSION_ZIP" ||
+       ! gnome-extensions install "$EXTENSION_ZIP"; then
+      printf 'Could not install GNOME extension: %s\n' "$uuid" >&2
+    fi
+  done < <(read_list "$EXTENSIONS_FILE")
+  rm -f -- "$EXTENSION_ZIP"
+  trap - EXIT
+fi
+
+if [[ -f "$DCONF_BACKUP" || -f "$YADM_ARCHIVE" ]] &&
+   confirm "Restore GNOME settings from the dconf backup?"; then
+  if [[ ! -f "$DCONF_BACKUP" ]]; then
+    printf 'Restoring the yadm archive to recover the dconf backup.\n'
+    yadm decrypt
+  fi
+  if [[ ! -s "$DCONF_BACKUP" ]]; then
+    printf 'Missing or empty dconf backup: %s\n' "$DCONF_BACKUP" >&2
+    exit 1
+  fi
+  dconf load / < "$DCONF_BACKUP"
+fi
+
+# --- Syncthing ---
+if command -v syncthing >/dev/null; then
+  systemctl --user enable --now syncthing.service
+fi
+
+# --- Dell KEK update workaround ---
+KEK_GUID=814e950f-1449-566a-a190-42c9d3a3a2df
+FWUPD_CONF=/etc/fwupd/fwupd.conf
+if [[ -r /sys/class/dmi/id/sys_vendor && -f "$FWUPD_CONF" ]] &&
+   [[ "$(< /sys/class/dmi/id/sys_vendor)" == Dell* ]] &&
+   command -v fwupdmgr >/dev/null; then
+  DISABLED_DEVICES="$(awk '
+    /^[[:space:]]*\[/ {
+      in_fwupd = ($0 ~ /^[[:space:]]*\[fwupd\][[:space:]]*$/)
+    }
+    in_fwupd && /^[[:space:]]*DisabledDevices[[:space:]]*=/ {
+      sub(/^[^=]*=[[:space:]]*/, "")
+      sub(/[[:space:]]*$/, "")
+      value = $0
+    }
+    END { print value }
+  ' "$FWUPD_CONF")"
+  CURRENT_GUIDS="${DISABLED_DEVICES//[[:space:]]/}"
+  if [[ ";${CURRENT_GUIDS,,};" != *";$KEK_GUID;"* ]] &&
+     confirm "Skip the Microsoft KEK CA update on this Dell?"; then
+    DISABLED_DEVICES="${DISABLED_DEVICES%;}"
+    sudo fwupdmgr --assume-yes modify-config DisabledDevices "${DISABLED_DEVICES:+$DISABLED_DEVICES;}$KEK_GUID"
+    sudo systemctl restart fwupd.service
+  fi
 fi
 
 # --- 12. microsandbox (official installer; manual updates only, no cron) ---
